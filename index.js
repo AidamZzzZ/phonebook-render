@@ -40,15 +40,12 @@ const timeZone = () => {
     return new Date().toString()
 }
 
-// Funcion para crear ID aleatorio de 6 digitos
+// Funcion para crear ID aleatorios
 const randomId = () => {
-    let letters = "ABCDEFGHIJKMNLOPQRSTUVWXYZabcdefghijkmnlopqrstuvwxyz0123456789"
-    let id = ''
-    for (let i = 0; i < 6; i++) {
-        id += letters.charAt(Math.floor(Math.random() * letters.length))
-    }
-    return id
+    return Math.floor(Math.random() * 10000000)
 }
+
+console.log(randomId())
 
 // Obtiene la lista de todos los numeros guardados en la agenda
 app.get('/api/persons', (request, response) => {
@@ -109,7 +106,6 @@ app.delete('/api/persons/:id', (request, response) => {
     if (index !== -1) {
         persons.splice(index, 1)
         response.status(204).json({ message: "Person successfully removed" })
-        
     } else {
         response.status(404).json({ message: "Person not found" })
     }
