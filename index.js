@@ -1,16 +1,18 @@
+// Se llama al dotenv para usar las variables de entorno
+require('dotenv').config()
+const Person = require('./models/persons')
 const express = require('express')
 const app = express()
-
 const morgan = require('morgan')
 const cors = require('cors')
 
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT
 
 // Se utiliza JSON-PARSER para acceder a los datos enviados en la solicitud HTTP
 app.use(express.json())
-app.use(morgan('tiny'))
 app.use(cors())
 app.use(express.static('dist'))
+app.use(morgan('tiny'))
 
 let persons = [
     { 
@@ -45,33 +47,34 @@ const randomId = () => {
     return Math.floor(Math.random() * 10000000)
 }
 
-console.log(randomId())
-
 // Obtiene la lista de todos los numeros guardados en la agenda
 app.get('/api/persons', (request, response) => {
-    response.send(persons)
+    Person
+        .find({})
+        .then(persons => {
+            response.json(persons)
+        })
 })
 
 // Obtiene un recurso individual si este extiste en la lista.
 app.get('/api/persons/:id', (request, response) => {
-    const id = Number(request.params.id)
-    const person = persons.find(person => person.id === id)
-    
-    if (!person) {
-        return response.status(404).json({
-            error: "Person not found"
+    Person
+        .findById(request.params.id)
+        .then(person => {
+            response.json(person)
         })
-    }
-    response.send(person)
 })
 
 // Muestra la informacion de la hora y el numero de contactos en la agenda.
 app.get('/info', (request, response) => {
-    const infoPeople = persons.length
-    response.send(
-        `<p>Phonebook has info for ${infoPeople} people</p>
-         <p>${timeZone()}</p>`
-    )
+    Person.estimatedDocumentCount()
+        .then(count => {
+            response.send(
+                `<p>Phonebook has info for ${count} people</p>
+                 <p>${timeZone()}</p>`
+            )  
+        })
+        .catch(error => console.log(error))
 })
 
 /*
@@ -79,37 +82,62 @@ app.get('/info', (request, response) => {
     si la persona existe dentro de la agenda, esta tambien mostrara un error, si no, esta creara un objeto
     singleton con un ID aleatorio, se pasara a la lista de contactos y se enviara como respuesta al json
 */
-app.post('/api/persons', (request, response) => {
+app.post('/api/persons', (request, response, next) => {
     const body = request.body
-    const findName = persons.some(person => person.name.toLowerCase() === body.name.toLowerCase())
     
     if (!body.name || !body.number) {
         return response.status(400).json({ message: "All fields have to be filled" })
-    } else if (findName) {
-        return response.status(409).json({ message: "This person already exists on the phonebook" })
     }
 
+    const person = new Person({
+        name: body.name,
+        number: body.number
+    })
+
+    person.save().then(personSaved => {
+        console.log(personSaved)
+        response.json(personSaved)
+    })
+    .catch(error => next(error))
+})
+
+app.put('/api/persons/:id', (request, response) => {
+    const body = request.body
+
     const person = {
-        id: randomId(),
         name: body.name,
         number: body.number
     }
-
-    persons = persons.concat(person)
-    response.json(person)
+    
+    Person
+        .findByIdAndUpdate((request.params.id), person, { new: true })
+        .then(updatedPerson => {
+        response.json(updatedPerson)
+    })
 })
 
-app.delete('/api/persons/:id', (request, response) => {
-    const id = Number(request.params.id)
-    const index = persons.findIndex(person => person.id === id)
+app.delete('/api/persons/:id', (request, response, next) => {
+    Person.findByIdAndDelete(request.params.id)
+        .then(result => {
+            response.status(204).end()
+        })
+        .catch(error => next(error))
+})
 
-    if (index !== -1) {
-        persons.splice(index, 1)
-        response.status(204).json({ message: "Person successfully removed" })
-    } else {
-        response.status(404).json({ message: "Person not found" })
+const errorHandle = (error, request, response, next) => {
+    console.log(error.message)
+
+    if (error.name === 'CastError') {
+        return response.status(400).end()
+    } else if (error.name === 'ValidationError') {
+        console.log(error.message)
+        return response.status(400).json({ error: error.message })
     }
-})
+    
+    next(err)
+}
+
+app.use(errorHandle)
 
 app.listen(PORT,  () => {
     console.log(`Server running in port: ${PORT}`)
